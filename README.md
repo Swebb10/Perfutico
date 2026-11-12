@@ -1,0 +1,30 @@
+# Perfutico
+
+Boutique de perfumería con React, Vite, Tailwind CSS, Lucide React y Firebase Authentication + Firestore.
+
+## Inicio local
+
+1. Copia `.env.example` a `.env.local` y completa las credenciales Firebase, el número de WhatsApp comercial y los datos reales de SINPE Móvil.
+2. En Firebase habilita Authentication con correo/contraseña y Google. Crea Cloud Firestore.
+3. Publica las reglas incluidas en `firestore.rules`.
+4. Ejecuta `npm install` y `npm run dev`.
+
+Sin credenciales se muestra un catálogo de demostración. Las cuentas, los favoritos, las sugerencias, las órdenes guardadas y la administración requieren Firebase.
+
+## Primer administrador
+
+Crea una cuenta desde la tienda y copia su UID desde Firebase Authentication. En Firestore, crea un documento `admins/{UID}` con el campo `role` (string) igual a `admin`. Esta acción se hace en Firebase Console: las reglas deniegan cambios de roles desde el navegador.
+
+## Publicar en Vercel
+
+Importa la carpeta o su repositorio en Vercel, configura las variables `VITE_*` del archivo `.env.local` y despliega. `vercel.json` contiene el rewrite de la SPA.
+
+## Colecciones Firestore
+
+- `products`: catálogo de lectura pública; cambios solo para administradores.
+- `admins/{uid}`: rol de acceso, administrado desde Firebase Console.
+- `users/{uid}/favorites`: favoritos privados por cuenta.
+- `users/{uid}/suggestions`: sugerencias privadas por cuenta.
+- `orders`: pedidos pendientes; invitados pueden crearlos, solo administración puede leerlos o modificarlos.
+
+Los teléfonos y titular de ejemplo deben sustituirse antes de recibir pedidos. Las imágenes iniciales son referencias de muestra.
