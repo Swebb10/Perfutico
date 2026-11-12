@@ -4,7 +4,7 @@ import ProductCard, { money } from "./ProductCard";
 import AdminDashboard from "./AdminDashboard";
 import { useAuth } from "../context/AuthContext";
 import { firebaseReady, settings } from "../lib/firebase";
-import { createOrder, favorite, sendSuggestion, watchFavorites, watchProducts } from "../lib/shop";
+import { createOrder, favorite, sendSuggestion, watchFavorites, watchProducts, watchSuggestions } from "../lib/shop";
 
 function useSaved(key, fallback) {
   const [value, setValue] = useState(() => { try { const saved = localStorage.getItem(key); return saved ? JSON.parse(saved) : fallback; } catch { return fallback; } });
@@ -29,6 +29,8 @@ function Storefront() {
   const { user, isAdmin, login, register, google, logout } = useAuth();
   const [products, setProducts] = useState([]);
   const [favorites, setFavorites] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsError, setSuggestionsError] = useState("");
   const [cart, setCart] = useSaved("perfutico-cart", []);
   const [theme, setTheme] = useSaved("perfutico-theme", "light");
   const [filter, setFilter] = useState("todos");
@@ -44,6 +46,10 @@ function Storefront() {
 
   useEffect(() => watchProducts(setProducts), []);
   useEffect(() => { if (!user) { setFavorites([]); return undefined; } return watchFavorites(user.uid, setFavorites); }, [user]);
+  useEffect(() => {
+    if (!isAdmin) { setSuggestions([]); setSuggestionsError(""); return undefined; }
+    return watchSuggestions(setSuggestions, (reason) => setSuggestionsError(reason.message || "No se pudieron cargar las sugerencias."));
+  }, [isAdmin]);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 2600); return () => clearTimeout(t); }, [toast]);
 
@@ -109,7 +115,7 @@ function Storefront() {
 
     {panel === "auth" && <AuthDialog close={() => setPanel("")} login={login} register={register} google={google} />}
     {panel === "profile" && user && <Profile user={user} favorites={likedProducts} openProduct={(p) => { setPanel(""); setChosen(p); }} close={() => setPanel("")} logout={async () => { await logout(); setPanel(""); }} />}
-    {panel === "admin" && isAdmin && <div className="admin-scrim"><AdminDashboard products={products} onClose={() => setPanel("")} notify={notify} /></div>}
+    {panel === "admin" && isAdmin && <div className="admin-scrim"><AdminDashboard products={products} suggestions={suggestions} suggestionsError={suggestionsError} onClose={() => setPanel("")} notify={notify} /></div>}
     {toast && <div className="toast"><Check size={15} />{toast}<button onClick={() => setToast("")}><X size={13} /></button></div>}
     {favorites.length > 0 && <button className="float-favs" aria-label="Favoritos" onClick={() => setPanel("profile")}><Heart size={15} fill="currentColor" /><b>{favorites.length}</b></button>}
   </div>;
@@ -124,7 +130,7 @@ function AuthDialog({ close, login, register, google }) {
 
 function Profile({ user, favorites, openProduct, close, logout }) {
   const [feedback,setFeedback] = useState(""); const [busy,setBusy] = useState(false);
-  const send = async (e) => { e.preventDefault(); const form = e.currentTarget; setBusy(true); setFeedback(""); try { await sendSuggestion(user.uid,new FormData(form).get("suggestion")); form.reset(); setFeedback("Gracias. Tu sugerencia llegó a la boutique."); } catch (err) { setFeedback(err.message || "No se pudo enviar."); } finally { setBusy(false); } };
+  const send = async (e) => { e.preventDefault(); const form = e.currentTarget; setBusy(true); setFeedback(""); try { await sendSuggestion(user.uid,new FormData(form).get("suggestion"),{ email:user.email, displayName:user.displayName }); form.reset(); setFeedback("Gracias. Tu sugerencia llegó a la boutique."); } catch (err) { setFeedback(err.message || "No se pudo enviar."); } finally { setBusy(false); } };
   return <SidePanel title="Mi perfil" eyebrow="TU ESPACIO" close={close}><div className="profile-user"><b>{(user.displayName || user.email || "P")[0].toUpperCase()}</b><span><strong>{user.displayName || "Bienvenido a Perfutico"}</strong><small>{user.email}</small></span></div><div className="profile-section"><div className="profile-title"><Heart size={15} /> Mis favoritos <small>{favorites.length}</small></div>{favorites.length ? favorites.map((p) => <button className="favorite-row" key={p.id} onClick={() => openProduct(p)}><img src={p.image} alt="" /><span><small>{p.brand}</small><strong>{p.name}</strong></span><b>→</b></button>) : <p className="muted">Guarda aquí las fragancias que quieras volver a descubrir.</p>}</div><div className="profile-section"><div className="profile-title">Buzón de sugerencias</div><p className="muted">¿Qué perfume te gustaría encontrar en la boutique?</p><form className="checkout-form" onSubmit={send}><textarea name="suggestion" rows="4" maxLength="1200" required placeholder="Cuéntanos qué tienes en mente…" />{feedback && <p className="notice">{feedback}</p>}<button className="primary full" disabled={busy}>{busy ? "Enviando…" : "Enviar sugerencia"}</button></form></div><button className="logout" onClick={logout}>Cerrar sesión</button></SidePanel>;
 }
 

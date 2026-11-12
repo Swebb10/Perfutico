@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { addDoc, collection, collectionGroup, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 export const samples = [
@@ -36,7 +36,34 @@ export function createOrder(order) {
   if (!db) throw new Error("Firebase aún no está configurado.");
   return addDoc(collection(db, "orders"), { ...order, status: "pendiente", createdAt: serverTimestamp() });
 }
-export function sendSuggestion(uid, text) {
+export function watchSuggestions(next, onError) {
+  if (!db) { next([]); return () => {}; }
+  const suggestionsQuery = query(collectionGroup(db, "suggestions"), orderBy("createdAt", "desc"));
+  return onSnapshot(
+    suggestionsQuery,
+    (snapshot) => next(snapshot.docs.map((item) => ({
+      id: item.id,
+      userId: item.ref.parent.parent?.id || item.data().userId || "",
+      ...item.data(),
+    }))),
+    (error) => onError?.(error),
+  );
+}
+export function markSuggestionReviewed(userId, suggestionId) {
+  if (!db || !userId) throw new Error("No se pudo identificar la cuenta de la sugerencia.");
+  return updateDoc(doc(db, "users", userId, "suggestions", suggestionId), {
+    status: "revisada",
+    reviewedAt: serverTimestamp(),
+  });
+}
+export function sendSuggestion(uid, text, userInfo = {}) {
   if (!db || !uid) throw new Error("Conecta Firebase e inicia sesión para enviar una sugerencia.");
-  return addDoc(collection(db, "users", uid, "suggestions"), { text: text.trim(), status: "nueva", createdAt: serverTimestamp() });
+  return addDoc(collection(db, "users", uid, "suggestions"), {
+    text: text.trim(),
+    status: "nueva",
+    userId: uid,
+    email: userInfo.email || "",
+    displayName: userInfo.displayName || "",
+    createdAt: serverTimestamp(),
+  });
 }

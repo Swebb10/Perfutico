@@ -20,15 +20,31 @@ service cloud.firestore {
       allow read, create, update, delete: if signedIn() && request.auth.uid == uid;
     }
     match /users/{uid}/suggestions/{suggestionId} {
-      allow read: if signedIn() && request.auth.uid == uid;
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['text', 'status', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['text', 'status', 'userId', 'email', 'displayName', 'createdAt'])
+        && request.resource.data.keys().hasAll(['text', 'status', 'userId', 'email', 'displayName', 'createdAt'])
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
         && request.resource.data.text.size() <= 1200
         && request.resource.data.status == 'nueva'
+        && request.resource.data.userId == uid
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 100
         && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt'])
+        && request.resource.data.status == 'revisada'
+        && request.resource.data.reviewedAt == request.time;
+      allow delete: if false;
+    }
+    // Required for collectionGroup('suggestions') used by the admin inbox.
+    // Keep the wildcard scoped to the users/{uid}/suggestions hierarchy.
+    match /{path=**}/suggestions/{suggestionId} {
+      allow read: if isAdmin() && path.matches('^users/[^/]+$');
     }
     match /orders/{orderId} {
       allow create: if request.resource.data.keys().hasOnly(['customerName','phone','address','items','total','status','createdAt','userId'])
