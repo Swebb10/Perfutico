@@ -4,7 +4,7 @@ import ProductCard, { money } from "./ProductCard";
 import AdminDashboard from "./AdminDashboard";
 import { useAuth } from "../context/AuthContext";
 import { firebaseReady, settings } from "../lib/firebase";
-import { createOrder, favorite, sendSuggestion, watchFavorites, watchProducts, watchSuggestions } from "../lib/shop";
+import { createOrder, favorite, sendSuggestion, watchFavorites, watchOrders, watchProducts, watchSuggestions } from "../lib/shop";
 
 function useSaved(key, fallback) {
   const [value, setValue] = useState(() => { try { const saved = localStorage.getItem(key); return saved ? JSON.parse(saved) : fallback; } catch { return fallback; } });
@@ -31,6 +31,8 @@ function Storefront() {
   const [favorites, setFavorites] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsError, setSuggestionsError] = useState("");
+  const [orders, setOrders] = useState([]);
+  const [ordersError, setOrdersError] = useState("");
   const [cart, setCart] = useSaved("perfutico-cart", []);
   const [theme, setTheme] = useSaved("perfutico-theme", "light");
   const [filter, setFilter] = useState("todos");
@@ -49,6 +51,10 @@ function Storefront() {
   useEffect(() => {
     if (!isAdmin) { setSuggestions([]); setSuggestionsError(""); return undefined; }
     return watchSuggestions(setSuggestions, (reason) => setSuggestionsError(reason.message || "No se pudieron cargar las sugerencias."));
+  }, [isAdmin]);
+  useEffect(() => {
+    if (!isAdmin) { setOrders([]); setOrdersError(""); return undefined; }
+    return watchOrders(setOrders, (reason) => setOrdersError(reason.message || "No se pudieron cargar los pedidos."));
   }, [isAdmin]);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 2600); return () => clearTimeout(t); }, [toast]);
@@ -115,7 +121,7 @@ function Storefront() {
 
     {panel === "auth" && <AuthDialog close={() => setPanel("")} login={login} register={register} google={google} />}
     {panel === "profile" && user && <Profile user={user} favorites={likedProducts} openProduct={(p) => { setPanel(""); setChosen(p); }} close={() => setPanel("")} logout={async () => { await logout(); setPanel(""); }} />}
-    {panel === "admin" && isAdmin && <div className="admin-scrim"><AdminDashboard products={products} suggestions={suggestions} suggestionsError={suggestionsError} onClose={() => setPanel("")} notify={notify} /></div>}
+    {panel === "admin" && isAdmin && <div className="admin-scrim"><AdminDashboard products={products} suggestions={suggestions} suggestionsError={suggestionsError} orders={orders} ordersError={ordersError} onClose={() => setPanel("")} notify={notify} /></div>}
     {toast && <div className="toast"><Check size={15} />{toast}<button onClick={() => setToast("")}><X size={13} /></button></div>}
     {favorites.length > 0 && <button className="float-favs" aria-label="Favoritos" onClick={() => setPanel("profile")}><Heart size={15} fill="currentColor" /><b>{favorites.length}</b></button>}
   </div>;

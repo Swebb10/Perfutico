@@ -36,6 +36,21 @@ export function createOrder(order) {
   if (!db) throw new Error("Firebase aún no está configurado.");
   return addDoc(collection(db, "orders"), { ...order, status: "pendiente", createdAt: serverTimestamp() });
 }
+export function watchOrders(next, onError) {
+  if (!db) { next([]); return () => {}; }
+  const ordersQuery = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+  return onSnapshot(
+    ordersQuery,
+    (snapshot) => next(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))),
+    (error) => onError?.(error),
+  );
+}
+export function updateOrderStatus(orderId, status) {
+  const allowedStatuses = ["pendiente", "sinpe_confirmado", "preparando", "enviado", "completado", "cancelado"];
+  if (!db) throw new Error("Conecta Firebase para actualizar pedidos.");
+  if (!allowedStatuses.includes(status)) throw new Error("El estado seleccionado no es válido.");
+  return updateDoc(doc(db, "orders", orderId), { status, updatedAt: serverTimestamp() });
+}
 export function watchSuggestions(next, onError) {
   if (!db) { next([]); return () => {}; }
   const suggestionsQuery = query(collectionGroup(db, "suggestions"), orderBy("createdAt", "desc"));

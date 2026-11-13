@@ -226,3 +226,60 @@ body{font-size:15px}
 /* Administration is a full-screen modal: scroll its overlay, not the page behind it. */
 body:has(.admin-scrim){overflow:hidden}
 .admin-scrim{overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable}
+
+/* Order management inside the admin dashboard. */
+.admin-tabs{flex-wrap:wrap}
+.admin-tab{white-space:nowrap}
+.admin-orders{max-width:1180px;margin:30px auto}
+.orders-heading{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:18px}
+.orders-heading>div>small{color:var(--faint);font-size:10px;letter-spacing:.13em}
+.orders-heading h2{margin:6px 0 0;font:400 36px var(--serif)}
+.orders-heading h2 span{color:var(--faint);font:400 15px var(--sans)}
+.orders-heading>p{color:var(--muted);font-size:12px}
+.orders-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:0 0 16px}
+.orders-toolbar label{color:var(--muted);font-size:11px}
+.orders-toolbar select,.order-status-control select{min-height:40px;padding:8px 34px 8px 11px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit}
+.order-list{display:grid;gap:14px}
+.order-card{padding:20px 22px;border:1px solid var(--line);background:var(--surface)}
+.order-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.order-card-head>div{display:flex;flex-direction:column;gap:5px}
+.order-card-head small,.order-customer>div>small,.order-products>small{color:var(--faint);font-size:9px;letter-spacing:.12em}
+.order-card-head time{color:var(--muted);font-size:11px}
+.order-status{display:inline-flex;align-items:center;min-height:28px;padding:4px 10px;border-radius:20px;background:var(--soft);color:var(--muted);font-size:11px;white-space:nowrap}
+.order-status-pendiente{background:#a8916124;color:#aa8f57}
+.order-status-sinpe_confirmado,.order-status-completado{background:#62825720;color:#779969}
+.order-status-preparando,.order-status-enviado{background:#68839a20;color:#779bb5}
+.order-status-cancelado{background:#a85f5f20;color:#bd7777}
+.order-customer{display:grid;grid-template-columns:minmax(190px,.8fr) minmax(240px,1.5fr);gap:20px;padding:16px 0 10px}
+.order-customer>div{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.order-customer strong{font-size:14px;font-weight:500}
+.order-customer span{color:var(--muted);font-size:12px}
+.order-customer p{display:flex;align-items:flex-start;gap:6px;margin:0;color:var(--muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.order-customer p svg{flex:none;margin-top:2px;color:var(--gold)}
+.order-contact{display:inline-flex;align-items:center;gap:7px;margin:2px 0 13px;padding:8px 11px;border:1px solid var(--line);color:var(--gold);font-size:11px}
+.order-contact:hover{border-color:var(--gold)}
+.order-products{padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.order-products>small{display:block;margin-bottom:7px}
+.order-product-row{display:flex;justify-content:space-between;gap:14px;padding:4px 0;color:var(--muted);font-size:12px}
+.order-product-row b{color:var(--ink);font-weight:400;white-space:nowrap}
+.order-card-foot{display:flex;justify-content:space-between;align-items:center;gap:18px;padding-top:14px}
+.order-total{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
+.order-total strong{color:var(--ink);font:500 25px var(--serif)}
+.order-status-control{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:11px}
+.order-status-control select{min-width:190px}
+@media(max-width:680px){
+  .orders-heading{align-items:flex-start;flex-direction:column;gap:4px}
+  .orders-heading h2{font-size:30px}
+  .orders-heading>p{margin:0}
+  .orders-toolbar{justify-content:space-between}
+  .orders-toolbar select{max-width:60%;font-size:12px}
+  .order-card{padding:15px 13px}
+  .order-card-head small{font-size:8px;overflow-wrap:anywhere}
+  .order-card-head time,.order-customer span,.order-customer p,.order-product-row{font-size:11px}
+  .order-status{font-size:10px}
+  .order-customer{grid-template-columns:1fr;gap:12px;padding:13px 0 9px}
+  .order-card-foot{align-items:stretch;flex-direction:column;gap:12px}
+  .order-total{justify-content:space-between}
+  .order-status-control{align-items:flex-start;flex-direction:column}
+  .order-status-control select{width:100%}
+}

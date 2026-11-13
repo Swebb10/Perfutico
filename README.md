@@ -25,7 +25,7 @@ Importa la carpeta o su repositorio en Vercel, configura las variables `VITE_*` 
 - `admins/{uid}`: rol de acceso, administrado desde Firebase Console.
 - `users/{uid}/favorites`: favoritos privados por cuenta.
 - `users/{uid}/suggestions`: sugerencias del perfil. Cada cliente puede consultar las propias; el administrador puede ver todas en Administración > Sugerencias y marcarlas como revisadas.
-- `orders`: pedidos pendientes; invitados pueden crearlos, solo administración puede leerlos o modificarlos.
+- `orders`: pedidos pendientes de SINPE creados por invitados o usuarios; el administrador puede consultarlos y actualizar su estado desde Administración > Pedidos.
 
 El buzón de administración consulta el grupo de colecciones `suggestions`. Para que funcione en Firebase, deben estar publicadas la regla de grupo incluida en `firestore.rules` y el índice incluido en `firestore.indexes.json`.
 

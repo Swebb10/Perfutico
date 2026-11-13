@@ -57,7 +57,11 @@ service cloud.firestore {
         && request.resource.data.status == 'pendiente'
         && request.resource.data.createdAt == request.time
         && (!('userId' in request.resource.data) || (signedIn() && request.resource.data.userId == request.auth.uid));
-      allow read, update, delete: if isAdmin();
+      allow read, delete: if isAdmin();
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status in ['pendiente', 'sinpe_confirmado', 'preparando', 'enviado', 'completado', 'cancelado']
+        && request.resource.data.updatedAt == request.time;
     }
   }
 }
