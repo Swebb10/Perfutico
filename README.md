@@ -21,12 +21,14 @@ Importa la carpeta o su repositorio en Vercel, configura las variables `VITE_*` 
 
 ## Colecciones Firestore
 
-- `products`: catálogo de lectura pública; cambios solo para administradores.
+- `products`: catálogo público e inventario; el panel avisa cuando quedan 3 unidades o menos, y solo administración puede modificar el stock.
 - `admins/{uid}`: rol de acceso, administrado desde Firebase Console.
 - `users/{uid}/favorites`: favoritos privados por cuenta.
 - `users/{uid}/suggestions`: sugerencias del perfil. Cada cliente puede consultar las propias; el administrador puede ver todas en Administración > Sugerencias y marcarlas como revisadas.
-- `orders`: pedidos pendientes de SINPE creados por invitados o usuarios; el administrador puede consultarlos y actualizar su estado desde Administración > Pedidos.
+- `orders`: pedidos SINPE de invitados o usuarios; al confirmar el SINPE, una transacción descuenta las unidades. Si se cancela antes del envío, las devuelve al inventario. Pedidos anteriores a este control requieren ajustar el stock manualmente.
 
 El buzón de administración consulta el grupo de colecciones `suggestions`. Para que funcione en Firebase, deben estar publicadas la regla de grupo incluida en `firestore.rules` y el índice incluido en `firestore.indexes.json`.
 
 Los teléfonos y titular de ejemplo deben sustituirse antes de recibir pedidos. Las imágenes iniciales son referencias de muestra.
+
+Las solicitudes pendientes no reservan unidades; el sistema vuelve a validar y descuenta el stock cuando el administrador confirma el SINPE. Si varias solicitudes compiten por las últimas unidades, el panel no permitirá confirmar una orden que ya no tenga disponibilidad.

@@ -1,4 +1,4 @@
-import { addDoc, collection, collectionGroup, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, collectionGroup, deleteDoc, doc, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 export const samples = [
@@ -34,7 +34,7 @@ export function deletePerfume(id) {
 }
 export function createOrder(order) {
   if (!db) throw new Error("Firebase aún no está configurado.");
-  return addDoc(collection(db, "orders"), { ...order, status: "pendiente", createdAt: serverTimestamp() });
+  return addDoc(collection(db, "orders"), { ...order, status: "pendiente", inventoryManaged: true, inventoryApplied: false, createdAt: serverTimestamp() });
 }
 export function watchOrders(next, onError) {
   if (!db) { next([]); return () => {}; }
@@ -49,7 +49,63 @@ export function updateOrderStatus(orderId, status) {
   const allowedStatuses = ["pendiente", "sinpe_confirmado", "preparando", "enviado", "completado", "cancelado"];
   if (!db) throw new Error("Conecta Firebase para actualizar pedidos.");
   if (!allowedStatuses.includes(status)) throw new Error("El estado seleccionado no es válido.");
-  return updateDoc(doc(db, "orders", orderId), { status, updatedAt: serverTimestamp() });
+  const transitions = {
+    pendiente: ["sinpe_confirmado", "cancelado"],
+    sinpe_confirmado: ["preparando", "cancelado"],
+    preparando: ["enviado", "cancelado"],
+    enviado: ["completado"],
+    completado: [],
+    cancelado: [],
+  };
+  return runTransaction(db, async (transaction) => {
+    const orderRef = doc(db, "orders", orderId);
+    const orderSnapshot = await transaction.get(orderRef);
+    if (!orderSnapshot.exists()) throw new Error("El pedido ya no existe.");
+    const order = orderSnapshot.data();
+    if (order.status !== status && !transitions[order.status]?.includes(status)) {
+      throw new Error("Ese cambio de estado no está permitido. Sigue el flujo de pedido indicado.");
+    }
+
+    const inventoryManaged = order.inventoryManaged === true;
+    const wasApplied = order.inventoryApplied === true;
+    const shouldDeduct = inventoryManaged && status === "sinpe_confirmado" && !wasApplied;
+    const shouldRestore = inventoryManaged && status === "cancelado" && wasApplied;
+    let inventoryAction = "none";
+
+    if (shouldDeduct || shouldRestore) {
+      const quantities = new Map();
+      for (const item of order.items || []) {
+        if (!item.id || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1) {
+          throw new Error("El pedido tiene un producto con cantidad o identificador inválido.");
+        }
+        quantities.set(item.id, (quantities.get(item.id) || 0) + Number(item.quantity));
+      }
+      if (!quantities.size) throw new Error("No se encontraron productos válidos para ajustar el inventario.");
+
+      const productIds = [...quantities.keys()];
+      const productRefs = productIds.map((productId) => doc(db, "products", productId));
+      const productSnapshots = await Promise.all(productRefs.map((productRef) => transaction.get(productRef)));
+      const adjustments = productSnapshots.map((snapshot, index) => {
+        const quantity = quantities.get(productIds[index]);
+        if (!snapshot.exists()) throw new Error("Un producto del pedido ya no existe en el catálogo.");
+        const product = snapshot.data();
+        const available = Math.max(0, Number(product.stock) || 0);
+        if (shouldDeduct && available < quantity) {
+          throw new Error("Stock insuficiente para " + product.name + ". Hay " + available + " y el pedido requiere " + quantity + ". No se confirmó el SINPE.");
+        }
+        return { ref: snapshot.ref, stock: shouldDeduct ? available - quantity : available + quantity };
+      });
+      adjustments.forEach(({ ref, stock }) => transaction.update(ref, { stock, stockUpdatedAt: serverTimestamp() }));
+      inventoryAction = shouldDeduct ? "deducted" : "restored";
+    }
+
+    transaction.update(orderRef, {
+      status,
+      updatedAt: serverTimestamp(),
+      inventoryApplied: shouldDeduct ? true : shouldRestore ? false : wasApplied,
+    });
+    return { inventoryAction, legacyOrder: !inventoryManaged };
+  });
 }
 export function watchSuggestions(next, onError) {
   if (!db) { next([]); return () => {}; }

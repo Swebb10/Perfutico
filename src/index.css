@@ -283,3 +283,26 @@ body:has(.admin-scrim){overflow:hidden}
   .order-status-control{align-items:flex-start;flex-direction:column}
   .order-status-control select{width:100%}
 }
+
+/* Inventory health and availability labels. */
+.stock-summary{display:flex;flex-wrap:wrap;align-items:center;gap:9px 18px;margin:0 0 14px;padding:11px 13px;border:1px solid var(--line);background:var(--page);color:var(--muted);font-size:11px}
+.stock-summary span{display:flex;align-items:center;gap:5px}
+.stock-summary b{color:var(--ink);font-weight:600}
+.stock-summary small{margin-left:auto;color:var(--faint);font-size:10px}
+.inventory-stock{font-size:10px!important}
+.inventory-stock-bajo{color:#b18d4f!important}
+.inventory-stock-agotado{color:#bd7777!important}
+.inventory-stock-disponible{color:#779969!important}
+.card-stock-warning{display:block;margin-top:8px;color:#b18d4f;font-size:11px}
+.order-inventory-note{margin:0 0 11px;color:var(--muted);font-size:11px;line-height:1.5}
+.order-inventory-note.is-legacy{color:#b18d4f}
+@media(max-width:680px){
+  .stock-summary{align-items:flex-start;flex-direction:column;gap:5px;font-size:12px}
+  .stock-summary small{margin:3px 0 0}
+  .inventory-stock{font-size:10px!important}
+  .card-stock-warning{font-size:10px}
+  .order-inventory-note{font-size:10px}
+}
+
+.card-stock-warning{font-weight:500}
+.cart-stock-warning{color:#b18d4f;font-size:11px!important;line-height:1.45}

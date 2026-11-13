@@ -7,6 +7,13 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin';
     }
+    function validOrderStatusTransition(current, next) {
+      return current == next
+        || (current == 'pendiente' && next in ['sinpe_confirmado', 'cancelado'])
+        || (current == 'sinpe_confirmado' && next in ['preparando', 'cancelado'])
+        || (current == 'preparando' && next in ['enviado', 'cancelado'])
+        || (current == 'enviado' && next == 'completado');
+    }
 
     match /products/{productId} {
       allow read: if true;
@@ -47,7 +54,7 @@ service cloud.firestore {
       allow read: if isAdmin() && path.matches('^users/[^/]+$');
     }
     match /orders/{orderId} {
-      allow create: if request.resource.data.keys().hasOnly(['customerName','phone','address','items','total','status','createdAt','userId'])
+      allow create: if request.resource.data.keys().hasOnly(['customerName','phone','address','items','total','status','createdAt','userId','inventoryManaged','inventoryApplied'])
         && request.resource.data.keys().hasAll(['customerName','phone','address','items','total','status','createdAt'])
         && request.resource.data.customerName is string && request.resource.data.customerName.size() > 0 && request.resource.data.customerName.size() <= 100
         && request.resource.data.phone is string && request.resource.data.phone.size() > 0 && request.resource.data.phone.size() <= 30
@@ -56,12 +63,19 @@ service cloud.firestore {
         && request.resource.data.total is number && request.resource.data.total > 0
         && request.resource.data.status == 'pendiente'
         && request.resource.data.createdAt == request.time
+        && (!('inventoryManaged' in request.resource.data) || request.resource.data.inventoryManaged == true)
+        && (!('inventoryApplied' in request.resource.data) || request.resource.data.inventoryApplied == false)
         && (!('userId' in request.resource.data) || (signedIn() && request.resource.data.userId == request.auth.uid));
       allow read, delete: if isAdmin();
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
-        && request.resource.data.status in ['pendiente', 'sinpe_confirmado', 'preparando', 'enviado', 'completado', 'cancelado']
-        && request.resource.data.updatedAt == request.time;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'inventoryApplied'])
+        && validOrderStatusTransition(resource.data.status, request.resource.data.status)
+        && request.resource.data.updatedAt == request.time
+        && (!('inventoryApplied' in request.resource.data) || request.resource.data.inventoryApplied is bool)
+        && (!('inventoryManaged' in resource.data) || request.resource.data.inventoryManaged == resource.data.inventoryManaged)
+        && (!('inventoryManaged' in resource.data) || resource.data.inventoryManaged != true
+          || !(request.resource.data.status in ['sinpe_confirmado', 'preparando', 'enviado', 'completado'])
+          || request.resource.data.inventoryApplied == true);
     }
   }
 }

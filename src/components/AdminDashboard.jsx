@@ -4,6 +4,8 @@ import { deletePerfume, markSuggestionReviewed, savePerfume, updateOrderStatus }
 import { money } from "./ProductCard";
 
 const blank = { name: "", brand: "", volume: "100 ml", category: "unisex", price: "", stock: "", image: "", description: "", notes: { top: "", heart: "", base: "" } };
+const LOW_STOCK_THRESHOLD = 3;
+const stockCount = (item) => Math.max(0, Number(item.stock) || 0);
 const orderStatuses = [
   ["pendiente", "Pendiente SINPE"],
   ["sinpe_confirmado", "SINPE confirmado"],
@@ -12,6 +14,14 @@ const orderStatuses = [
   ["completado", "Completado"],
   ["cancelado", "Cancelado"],
 ];
+const orderTransitions = {
+  pendiente: ["sinpe_confirmado", "cancelado"],
+  sinpe_confirmado: ["preparando", "cancelado"],
+  preparando: ["enviado", "cancelado"],
+  enviado: ["completado"],
+  completado: [],
+  cancelado: [],
+};
 const dateLabel = (value) => {
   const date = value?.toDate ? value.toDate() : value ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat("es-CR", { dateStyle: "medium", timeStyle: "short" }).format(date) : "Fecha no disponible";
@@ -28,6 +38,8 @@ export default function AdminDashboard({ products, suggestions, suggestionsError
   const pending = suggestions.filter((item) => item.status !== "revisada").length;
   const pendingOrders = orders.filter((item) => item.status === "pendiente").length;
   const visibleOrders = orders.filter((item) => orderFilter === "todos" || item.status === orderFilter);
+  const lowStockProducts = products.filter((item) => stockCount(item) > 0 && stockCount(item) <= LOW_STOCK_THRESHOLD).length;
+  const outOfStockProducts = products.filter((item) => stockCount(item) === 0).length;
   const edit = (item) => { setEditing(item.id); setForm({ ...blank, ...item, notes: { ...blank.notes, ...(item.notes || {}) } }); setError(""); document.querySelector(".admin-scrim")?.scrollTo({ top: 0, behavior: "smooth" }); };
   const field = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const note = (key) => (e) => setForm((f) => ({ ...f, notes: { ...f.notes, [key]: e.target.value } }));
@@ -50,7 +62,13 @@ export default function AdminDashboard({ products, suggestions, suggestionsError
   };
   const changeOrderStatus = async (item, status) => {
     setError(""); setUpdatingOrder(item.id);
-    try { await updateOrderStatus(item.id, status); notify("Estado del pedido actualizado"); }
+    try {
+      const result = await updateOrderStatus(item.id, status);
+      if (result.inventoryAction === "deducted") notify("SINPE confirmado; se descontó el stock del pedido");
+      else if (result.inventoryAction === "restored") notify("Pedido cancelado; el stock volvió al inventario");
+      else if (result.legacyOrder && (status === "sinpe_confirmado" || ["sinpe_confirmado", "preparando", "enviado", "completado"].includes(item.status))) notify("Estado actualizado. Este pedido anterior requiere revisar el inventario manualmente.");
+      else notify("Estado del pedido actualizado");
+    }
     catch (reason) { setError(reason.message || "No se pudo actualizar el pedido. Revisa las reglas de Firestore."); }
     finally { setUpdatingOrder(""); }
   };
@@ -81,8 +99,9 @@ export default function AdminDashboard({ products, suggestions, suggestionsError
             <header className="order-card-head"><div><small>PEDIDO · {item.id}</small><time>{dateLabel(item.createdAt)}</time></div><span className={"order-status order-status-" + (item.status || "pendiente")}>{statusLabel}</span></header>
             <div className="order-customer"><div><small>CLIENTE</small><strong>{item.customerName}</strong><span>{item.phone}</span></div><div><small>ENTREGA</small><p><MapPin size={14} />{item.address}</p></div></div>
             <a className="order-contact" href={whatsappLink(item)} target="_blank" rel="noreferrer"><Phone size={15} /> Contactar por WhatsApp</a>
+            <p className={item.inventoryManaged ? "order-inventory-note" : "order-inventory-note is-legacy"}>{item.inventoryManaged ? item.inventoryApplied ? "Stock descontado del inventario." : item.status === "cancelado" ? "Pedido cancelado; inventario revisado." : "El stock se descontará al confirmar el SINPE." : "Pedido anterior al control automático: revisa el inventario manualmente."}</p>
             <div className="order-products"><small>PRODUCTOS</small>{(item.items || []).map((product, index) => <div className="order-product-row" key={product.id || index}><span>{product.quantity} × {product.name}</span><b>{money(Number(product.unitPrice || 0) * Number(product.quantity || 0))}</b></div>)}</div>
-            <footer className="order-card-foot"><div className="order-total"><span>Total del pedido</span><strong>{money(item.total)}</strong></div><label className="order-status-control">Estado<select value={item.status || "pendiente"} disabled={updatingOrder === item.id} onChange={(event) => changeOrderStatus(item, event.target.value)}>{orderStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></footer>
+            <footer className="order-card-foot"><div className="order-total"><span>Total del pedido</span><strong>{money(item.total)}</strong></div><label className="order-status-control">Estado<select value={item.status || "pendiente"} disabled={updatingOrder === item.id} onChange={(event) => changeOrderStatus(item, event.target.value)}>{[item.status || "pendiente", ...(orderTransitions[item.status || "pendiente"] || [])].map((value) => <option key={value} value={value}>{orderStatuses.find(([status]) => status === value)?.[1] || value}</option>)}</select></label></footer>
           </article>;
         })}
       </div>}
@@ -111,7 +130,8 @@ export default function AdminDashboard({ products, suggestions, suggestionsError
         <div className="admin-buttons"><button className="primary" disabled={busy}>{busy ? "Guardando…" : editing ? "Guardar cambios" : "Añadir perfume"}</button>{editing && <button type="button" className="secondary" onClick={() => { setForm(blank); setEditing(null); }}>Cancelar</button>}</div>
       </form>
       <section className="admin-card"><div className="admin-card-head"><div><small>INVENTARIO</small><h2>Perfumes <span>({products.length})</span></h2></div></div>
-        <div className="inventory">{products.map((item) => <div className="inventory-row" key={item.id}><img src={item.image} alt="" /><div><strong>{item.name}</strong><small>{item.brand} · {item.volume}</small></div><div className="inventory-price">{money(item.price)}<small>{item.stock || 0} unid.</small></div><button className="circle-btn" onClick={() => edit(item)} aria-label={"Editar " + item.name}><Pencil size={15} /></button><button className="circle-btn" onClick={() => destroy(item)} aria-label={"Eliminar " + item.name}><Trash2 size={15} /></button></div>)}</div>
+        <div className="stock-summary"><span><b>{lowStockProducts}</b> con stock bajo</span><span><b>{outOfStockProducts}</b> agotados</span><small>Aviso de stock bajo: {LOW_STOCK_THRESHOLD} unidades o menos</small></div>
+        <div className="inventory">{products.map((item) => { const stock = stockCount(item); const stockState = stock === 0 ? "agotado" : stock <= LOW_STOCK_THRESHOLD ? "bajo" : "disponible"; return <div className="inventory-row" key={item.id}><img src={item.image} alt="" /><div><strong>{item.name}</strong><small>{item.brand} · {item.volume}</small><small className={"inventory-stock inventory-stock-" + stockState}>{stock} unid. · {stockState === "agotado" ? "Agotado" : stockState === "bajo" ? "Stock bajo" : "Disponible"}</small></div><div className="inventory-price">{money(item.price)}</div><button className="circle-btn" onClick={() => edit(item)} aria-label={"Editar " + item.name}><Pencil size={15} /></button><button className="circle-btn" onClick={() => destroy(item)} aria-label={"Eliminar " + item.name}><Trash2 size={15} /></button></div>; })}</div>
         <p className="fine-print">Firestore aplica el rol de administrador en cada operación.</p>
       </section>
     </div>}
