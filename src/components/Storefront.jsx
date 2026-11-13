@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowRight, Check, ChevronDown, Heart, Menu, Moon, Plus, Search, ShoppingBag, Sparkles, Sun, UserRound, X } from "lucide-react";
 import ProductCard, { money } from "./ProductCard";
 import AdminDashboard from "./AdminDashboard";
@@ -12,6 +12,45 @@ function useSaved(key, fallback) {
   return [value, setValue];
 }
 
+function useCartForSession(user, authLoading) {
+  const key = authLoading ? "" : user ? "perfutico-cart:user:" + user.uid : "perfutico-cart:guest";
+  const [savedCart, setSavedCart] = useState([]);
+  const [loadedKey, setLoadedKey] = useState("");
+  const activeKey = useRef(key);
+  activeKey.current = key;
+  const ready = Boolean(key && loadedKey === key);
+  const cart = ready ? savedCart : [];
+
+  useEffect(() => {
+    if (!key) return;
+    let nextCart = [];
+    try {
+      const stored = localStorage.getItem(key);
+      const parsed = stored ? JSON.parse(stored) : [];
+      nextCart = Array.isArray(parsed) ? parsed : [];
+    } catch { nextCart = []; }
+    // The previous shared cart could contain products from several sessions; never assign it to an account.
+    try { localStorage.removeItem("perfutico-cart"); } catch { /* Ignore disabled browser storage. */ }
+    setSavedCart(nextCart);
+    setLoadedKey(key);
+  }, [key]);
+
+  useEffect(() => {
+    if (!ready) return;
+    try { localStorage.setItem(key, JSON.stringify(savedCart)); } catch { /* Storage may be disabled by the browser. */ }
+  }, [key, ready, savedCart]);
+
+  const setCart = (update) => {
+    if (!ready) return;
+    const keyAtCall = key;
+    setSavedCart((current) => {
+      if (activeKey.current !== keyAtCall) return current;
+      return typeof update === "function" ? update(current) : update;
+    });
+  };
+  return { cart, setCart, ready };
+}
+
 function Sheet({ children, close, title, className = "" }) {
   return <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}><section className={"sheet " + className} role="dialog" aria-modal="true" aria-label={title}>{children}</section></div>;
 }
@@ -19,7 +58,7 @@ function Sheet({ children, close, title, className = "" }) {
 function ProductDetail({ item, close, add }) {
   const [qty, setQty] = useState(1); if (!item) return null;
   const stock = Math.max(0, Number(item.stock) || 0);
-  return <Sheet close={close} title={item.name} className="detail-sheet"><button className="sheet-close circle-btn" onClick={close} aria-label="Cerrar"><X /></button><div className="detail-photo"><img src={item.image} alt={item.name} /></div><div className="detail-content"><small>{item.brand} · {item.volume || "100 ml"}</small><h2>{item.name}</h2><strong className="detail-price">{money(item.price)}</strong><p>{item.description || "Una fragancia cuidadosamente seleccionada para acompañar lo que permanece."}</p><div className="notes">{[["Salida", item.notes?.top], ["Corazón", item.notes?.heart], ["Fondo", item.notes?.base]].map(([title, value]) => <div key={title}><small>{title}</small><span>{value || "Notas de autor"}</span></div>)}</div><small className="stock-note">{stock > 0 ? stock + " disponibles" : "Agotado por ahora"}</small><div className="buy-row"><div className="qty"><button aria-label="Reducir cantidad" disabled={qty <= 1} onClick={() => setQty(Math.max(1, qty - 1))}><X size={13} /></button>{qty}<button aria-label="Aumentar cantidad" disabled={qty >= stock} onClick={() => setQty(Math.min(stock, qty + 1))}><Plus size={13} /></button></div><button className="primary grow" disabled={stock === 0} onClick={() => { add(item, qty); close(); }}>Añadir · {money(item.price * qty)}</button></div></div></Sheet>;
+  return <Sheet close={close} title={item.name} className="detail-sheet"><button className="sheet-close circle-btn" onClick={close} aria-label="Cerrar"><X /></button><div className="detail-photo"><img src={item.image} alt={item.name} /></div><div className="detail-content"><small>{item.brand} · {item.volume || "100 ml"}</small><h2>{item.name}</h2><strong className="detail-price">{money(item.price)}</strong><p>{item.description || "Una fragancia cuidadosamente seleccionada para acompañar lo que permanece."}</p><div className="notes">{[["Salida", item.notes?.top], ["Corazón", item.notes?.heart], ["Fondo", item.notes?.base]].map(([title, value]) => <div key={title}><small>{title}</small><span>{value || "Notas de autor"}</span></div>)}</div><small className="stock-note">{stock > 0 ? stock + " disponibles" : "Agotado por ahora"}</small><div className="buy-row"><div className="qty"><button aria-label="Reducir cantidad" disabled={qty <= 1} onClick={() => setQty(Math.max(1, qty - 1))}><X size={13} /></button>{qty}<button aria-label="Aumentar cantidad" disabled={qty >= stock} onClick={() => setQty(Math.min(stock, qty + 1))}><Plus size={13} /></button></div><button className="primary grow" disabled={stock === 0} onClick={() => { if (add(item, qty)) close(); }}>Añadir · {money(item.price * qty)}</button></div></div></Sheet>;
 }
 
 function SidePanel({ title, eyebrow, close, children }) {
@@ -27,7 +66,7 @@ function SidePanel({ title, eyebrow, close, children }) {
 }
 
 function Storefront() {
-  const { user, isAdmin, login, register, google, logout } = useAuth();
+  const { user, isAdmin, loading: authLoading, login, register, google, logout } = useAuth();
   const [products, setProducts] = useState([]);
   const [productsLoaded, setProductsLoaded] = useState(false);
   const [favorites, setFavorites] = useState([]);
@@ -35,7 +74,7 @@ function Storefront() {
   const [suggestionsError, setSuggestionsError] = useState("");
   const [orders, setOrders] = useState([]);
   const [ordersError, setOrdersError] = useState("");
-  const [cart, setCart] = useSaved("perfutico-cart", []);
+  const { cart, setCart, ready: cartReady } = useCartForSession(user, authLoading);
   const [theme, setTheme] = useSaved("perfutico-theme", "light");
   const [filter, setFilter] = useState("todos");
   const [sort, setSort] = useState("curated");
@@ -68,13 +107,15 @@ function Storefront() {
   const notify = (message) => setToast(message);
   const goCollection = () => { setMenu(false); document.getElementById("collection")?.scrollIntoView({ behavior: "smooth" }); };
   const addToCart = (product, qty = 1) => {
+    if (!cartReady) { notify("Estamos preparando la bolsa de esta sesión. Inténtalo de nuevo en un momento."); return false; }
     const liveProduct = products.find((item) => item.id === product.id) || product;
     const available = Math.max(0, Number(liveProduct.stock) || 0);
     const existingQuantity = cart.find((item) => item.id === product.id)?.quantity || 0;
     const quantityToAdd = Math.min(qty, Math.max(0, available - existingQuantity));
-    if (quantityToAdd <= 0) { notify(available === 0 ? product.name + " está agotado" : "Ya tienes todas las unidades disponibles en la bolsa"); return; }
+    if (quantityToAdd <= 0) { notify(available === 0 ? product.name + " está agotado" : "Ya tienes todas las unidades disponibles en la bolsa"); return false; }
     setCart((prev) => { const old = prev.find((item) => item.id === product.id); if (old) return prev.map((item) => item.id === product.id ? { ...item, stock: available, quantity: Math.min(available, item.quantity + quantityToAdd) } : item); return [...prev, { id:liveProduct.id,name:liveProduct.name,brand:liveProduct.brand,volume:liveProduct.volume,image:liveProduct.image,price:Number(liveProduct.price),stock:available,quantity:quantityToAdd }]; });
     notify(quantityToAdd < qty ? "Solo se añadieron " + quantityToAdd + " unidades disponibles" : product.name + " añadido a la bolsa");
+    return true;
   };
   const toggleFavorite = async (product) => {
     if (!user) { setPanel("auth"); return; }
@@ -91,6 +132,7 @@ function Storefront() {
     setCart((prev) => prev.map((item) => item.id === id ? { ...item, stock: available, quantity: Math.min(quantity, available) } : item));
   };
   const placeOrder = async (customer) => {
+    if (!cartReady) { setError("Estamos preparando la bolsa de esta sesión. Inténtalo de nuevo en un momento."); return; }
     if (!productsLoaded) { setError("Estamos comprobando el inventario. Inténtalo de nuevo en un momento."); return; }
     const unavailable = cart.map((item) => ({ item, product: products.find((product) => product.id === item.id) })).find(({ item, product }) => !product || Math.max(0, Number(product.stock) || 0) < item.quantity);
     if (unavailable) {
@@ -99,18 +141,27 @@ function Storefront() {
       return;
     }
     setBusy(true); setError("");
+    const orderItems = cart.map((item) => ({ ...item }));
+    const orderTotal = total;
     let id = "PFT-" + Date.now().toString().slice(-7); let saved = false;
     try {
       const ref = await createOrder({ customerName:customer.name.trim(), phone:customer.phone.trim(), address:customer.address.trim(), items:cart.map((p) => ({ id:p.id,name:p.name,brand:p.brand,quantity:p.quantity,unitPrice:p.price })), total, ...(user ? { userId:user.uid } : {}) });
       id = ref.id; saved = true;
-    } catch (e) { if (firebaseReady) setError(e.message || "No se pudo guardar la orden; puedes continuar por WhatsApp."); }
-    const lines = cart.map((p) => "• " + p.quantity + " × " + p.name + " — " + money(p.price*p.quantity)).join("\n");
+    } catch (e) {
+      if (firebaseReady) {
+        setError("El pedido no se guardó en Firebase, así que aún no aparece en Administración. Revisa las reglas publicadas e inténtalo otra vez. " + (e.message || ""));
+        setBusy(false);
+        return;
+      }
+    }
+    const lines = orderItems.map((p) => "• " + p.quantity + " × " + p.name + " — " + money(p.price*p.quantity)).join("\n");
     const message = ["Hola, quiero confirmar mi pedido en Perfutico.","","Orden: " + id,"Nombre: " + customer.name.trim(),"Teléfono: " + customer.phone.trim(),"Entrega: " + customer.address.trim(),"","Productos:",lines,"","Total a pagar: " + money(total),"SINPE Móvil: " + (settings.sinpe || "configurar número"),"Titular: " + (settings.sinpeHolder || "configurar titular"),"","Adjunto en este chat la foto del comprobante SINPE."].join("\n");
     const phone = (settings.whatsapp || "").replace(/\D/g, "");
-    setOrder({ id, saved, url:"https://api.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(message) });
+    setOrder({ id, saved, items:orderItems, total:orderTotal, url:"https://api.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(message) });
+    if (saved) setCart([]);
     setBusy(false);
   };
-  const closeOrder = () => { setCart([]); setOrder(null); setPanel(""); };
+  const closeOrder = () => { setOrder(null); setPanel(""); };
   const nav = <><button onClick={goCollection}>La colección</button><a href="#ritual" onClick={() => setMenu(false)}>Nuestro ritual</a>{user && <button onClick={() => { setPanel("profile"); setMenu(false); }}>Mi perfil</button>}{isAdmin && <button onClick={() => { setPanel("admin"); setMenu(false); }}>Administración</button>}</>;
 
   return <div className="site">
@@ -137,9 +188,9 @@ function Storefront() {
     <footer className="footer"><div className="footer-main"><div><a className="wordmark footer-brand" href="#"><b>P</b><span>Perfutico</span></a><p>Una selección personal de fragancias extraordinarias.</p><small>SAN JOSÉ · COSTA RICA</small></div><div><small>EXPLORA</small><button onClick={goCollection}>La colección</button><a href="#ritual">Nuestro ritual</a></div><div><small>ATENCIÓN</small><span>Pedidos por WhatsApp</span><span>Pago con SINPE Móvil</span><span>Entrega por coordinar</span></div><a className="social" href="https://instagram.com" target="_blank" rel="noreferrer" aria-label="Instagram"><Sparkles size={17} /></a></div><div className="footer-bottom"><span>© {new Date().getFullYear()} PERFUTICO PERFUMERÍA SELECTA</span><span>HECHO CON INTENCIÓN · SAN JOSÉ, C.R.</span><button onClick={() => window.scrollTo({top:0,behavior:"smooth"})}><ArrowDown size={13} /> VOLVER ARRIBA</button></div>{!firebaseReady && <p className="preview">Vista de catálogo de demostración · Configura las variables del archivo .env.local para activar las funciones de Firebase.</p>}</footer>
 
     {chosen && <ProductDetail item={products.find((item) => item.id === chosen.id) || chosen} close={() => setChosen(null)} add={addToCart} />}
-    {panel === "cart" && <SidePanel title={"Bolsa ("+cartCount+")"} eyebrow="TU SELECCIÓN" close={() => setPanel("")}>{cart.length ? <><div className="cart-list">{cart.map((p) => { const currentProduct = products.find((item) => item.id === p.id); const available = currentProduct ? Math.max(0, Number(currentProduct.stock) || 0) : 0; return <article className="cart-item" key={p.id}><img src={p.image} alt="" /><div className="cart-item-info"><small>{p.brand}</small><strong>{p.name}</strong><span>{p.volume}</span>{productsLoaded && (!currentProduct || available < p.quantity) && <small className="cart-stock-warning">{currentProduct ? "Solo quedan " + available + " unidades; ajusta la cantidad." : "Producto agotado o retirado del catálogo."}</small>}<div className="qty"><button onClick={() => setQty(p.id,p.quantity-1)}><X size={12} /></button>{p.quantity}<button onClick={() => setQty(p.id,p.quantity+1)}><Plus size={12} /></button><button className="remove" onClick={() => setQty(p.id,0)}>Quitar</button></div></div><b>{money(p.price*p.quantity)}</b></article>; })}</div><div className="cart-bottom"><div><span>Total</span><strong>{money(total)}</strong></div><p>Envío y entrega se coordinan por WhatsApp.</p><button className="primary full" onClick={() => { setPanel("checkout"); setOrder(null); setError(""); }}>Continuar con el pedido <ArrowRight size={15} /></button><small>SINPE Móvil · Confirmación personal</small></div></> : <div className="panel-empty"><ShoppingBag /><h3>Aún no hay perfumes</h3><p>Descubre una esencia que se sienta como tuya.</p><button onClick={() => { setPanel(""); goCollection(); }}>Explorar la colección →</button></div>}</SidePanel>}
+    {panel === "cart" && <SidePanel title={"Bolsa ("+cartCount+")"} eyebrow="TU SELECCIÓN" close={() => setPanel("")}>{cart.length ? <><div className="cart-list">{cart.map((p) => { const currentProduct = products.find((item) => item.id === p.id); const available = currentProduct ? Math.max(0, Number(currentProduct.stock) || 0) : 0; return <article className="cart-item" key={p.id}><img src={p.image} alt="" /><div className="cart-item-info"><small>{p.brand}</small><strong>{p.name}</strong><span>{p.volume}</span>{productsLoaded && (!currentProduct || available < p.quantity) && <small className="cart-stock-warning">{currentProduct ? "Solo quedan " + available + " unidades; ajusta la cantidad." : "Producto agotado o retirado del catálogo."}</small>}<div className="qty"><button onClick={() => setQty(p.id,p.quantity-1)}><X size={12} /></button>{p.quantity}<button onClick={() => setQty(p.id,p.quantity+1)}><Plus size={12} /></button><button className="remove" onClick={() => setQty(p.id,0)}>Quitar</button></div></div><b>{money(p.price*p.quantity)}</b></article>; })}</div><div className="cart-bottom"><div><span>Total</span><strong>{money(total)}</strong></div><p>La bolsa es una selección de esta sesión. El pedido se registra al confirmar tus datos de envío.</p><button className="primary full" onClick={() => { setPanel("checkout"); setOrder(null); setError(""); }}>Continuar con el pedido <ArrowRight size={15} /></button><small>SINPE Móvil · Confirmación personal</small></div></> : <div className="panel-empty"><ShoppingBag /><h3>Aún no hay perfumes</h3><p>Descubre una esencia que se sienta como tuya.</p><button onClick={() => { setPanel(""); goCollection(); }}>Explorar la colección →</button></div>}</SidePanel>}
 
-    {panel === "checkout" && <Sheet close={() => setPanel("")} title="Coordina tu entrega" className="checkout-sheet"><header className="checkout-head"><div><small>PERFUTICO · PEDIDO</small><h2>{order ? "Pedido listo" : "Coordina tu entrega"}</h2></div><button className="circle-btn" onClick={() => setPanel("")}><X /></button></header>{order ? <div className="order-success"><div className="check-mark"><Check /></div><small>ORDEN {order.id}</small><h3>Tu próxima esencia está cerca.</h3><p>Realiza el SINPE Móvil y comparte el comprobante por WhatsApp. El inventario se descuenta al confirmar el pago; la solicitud pendiente no reserva unidades.</p><div className="sinpe-box"><small>SINPE MÓVIL</small><div><span>Número</span><b>{settings.sinpe || "Configurar VITE_SINPE_NUMBER"}</b></div><div><span>Titular</span><b>{settings.sinpeHolder || "Configurar VITE_SINPE_HOLDER"}</b></div><div className="sinpe-total"><span>Total a transferir</span><strong>{money(total)}</strong></div></div><div className="order-lines">{cart.map((p) => <div key={p.id}><span>{p.quantity} × {p.name}</span><b>{money(p.price*p.quantity)}</b></div>)}</div>{!order.saved && <p className="notice">No se guardó la orden en Firebase. Puedes continuar por WhatsApp y revisar la configuración.</p>}{error && <p className="notice">{error}</p>}<a className="whatsapp primary full" href={order.url} target="_blank" rel="noreferrer">Enviar comprobante por WhatsApp ↗</a><p className="hint">El mensaje ya incluye tu pedido. Adjunta la foto del comprobante en el chat.</p><button className="plain-link" onClick={closeOrder}>Volver a la tienda</button></div> : <div className="checkout-layout"><form className="checkout-form" onSubmit={(e) => { e.preventDefault(); placeOrder(Object.fromEntries(new FormData(e.currentTarget))); }}><small>DATOS DE ENVÍO · COMPRA COMO INVITADO</small><label>Nombre completo<input name="name" required defaultValue={user?.displayName || ""} placeholder="¿A quién entregamos?" /></label><label>Teléfono<input name="phone" required autoComplete="tel" placeholder="+506 8888 8888" /></label><label>Dirección o punto de entrega<textarea name="address" required rows="3" placeholder="Provincia, cantón y señas para coordinar" /></label><div className="checkout-total"><span>Total del pedido</span><strong>{money(total)}</strong></div>{error && <p className="notice">{error}</p>}<button className="primary full" disabled={busy}>{busy ? "Preparando pedido…" : "Confirmar pedido"} <ArrowRight size={14} /></button><button className="plain-link" type="button" onClick={() => setPanel("cart")}>← Volver a la bolsa</button></form><aside className="checkout-aside"><Sparkles /><h3>Un trato personal, de principio a fin.</h3><p>Primero coordinamos la entrega. Después haces la transferencia SINPE Móvil y nos envías el comprobante. La solicitud pendiente no aparta unidades.</p><ol><li>Confirma tus datos</li><li>Haz el SINPE</li><li>Adjunta el comprobante</li></ol><small>Sin registro obligatorio</small></aside></div>}</Sheet>}
+    {panel === "checkout" && <Sheet close={() => setPanel("")} title="Coordina tu entrega" className="checkout-sheet"><header className="checkout-head"><div><small>PERFUTICO · PEDIDO</small><h2>{order ? "Pedido listo" : "Coordina tu entrega"}</h2></div><button className="circle-btn" onClick={() => setPanel("")}><X /></button></header>{order ? <div className="order-success"><div className="check-mark"><Check /></div><small>ORDEN {order.id}</small><h3>Tu próxima esencia está cerca.</h3><p>Realiza el SINPE Móvil y comparte el comprobante por WhatsApp. El inventario se descuenta al confirmar el pago; la solicitud pendiente no reserva unidades.</p><div className="sinpe-box"><small>SINPE MÓVIL</small><div><span>Número</span><b>{settings.sinpe || "Configurar VITE_SINPE_NUMBER"}</b></div><div><span>Titular</span><b>{settings.sinpeHolder || "Configurar VITE_SINPE_HOLDER"}</b></div><div className="sinpe-total"><span>Total a transferir</span><strong>{money(order.total)}</strong></div></div><div className="order-lines">{order.items.map((p) => <div key={p.id}><span>{p.quantity} × {p.name}</span><b>{money(p.price*p.quantity)}</b></div>)}</div>{!order.saved && <p className="notice">Vista de demostración: no se guardó una orden en Firebase.</p>}{error && <p className="notice">{error}</p>}<a className="whatsapp primary full" href={order.url} target="_blank" rel="noreferrer">Enviar comprobante por WhatsApp ↗</a><p className="hint">El mensaje ya incluye tu pedido. Adjunta la foto del comprobante en el chat.</p><button className="plain-link" onClick={closeOrder}>Volver a la tienda</button></div> : <div className="checkout-layout"><form className="checkout-form" onSubmit={(e) => { e.preventDefault(); placeOrder(Object.fromEntries(new FormData(e.currentTarget))); }}><small>DATOS DE ENVÍO · COMPRA COMO INVITADO</small><label>Nombre completo<input name="name" required defaultValue={user?.displayName || ""} placeholder="¿A quién entregamos?" /></label><label>Teléfono<input name="phone" required autoComplete="tel" placeholder="+506 8888 8888" /></label><label>Dirección o punto de entrega<textarea name="address" required rows="3" placeholder="Provincia, cantón y señas para coordinar" /></label><div className="checkout-total"><span>Total del pedido</span><strong>{money(total)}</strong></div>{error && <p className="notice">{error}</p>}<button className="primary full" disabled={busy}>{busy ? "Preparando pedido…" : "Confirmar pedido"} <ArrowRight size={14} /></button><button className="plain-link" type="button" onClick={() => setPanel("cart")}>← Volver a la bolsa</button></form><aside className="checkout-aside"><Sparkles /><h3>Un trato personal, de principio a fin.</h3><p>Primero coordinamos la entrega. Después haces la transferencia SINPE Móvil y nos envías el comprobante. La solicitud pendiente no aparta unidades.</p><ol><li>Confirma tus datos</li><li>Haz el SINPE</li><li>Adjunta el comprobante</li></ol><small>Sin registro obligatorio</small></aside></div>}</Sheet>}
 
     {panel === "auth" && <AuthDialog close={() => setPanel("")} login={login} register={register} google={google} />}
     {panel === "profile" && user && <Profile user={user} favorites={likedProducts} openProduct={(p) => { setPanel(""); setChosen(p); }} close={() => setPanel("")} logout={async () => { await logout(); setPanel(""); }} />}

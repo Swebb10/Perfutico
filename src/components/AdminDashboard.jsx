@@ -92,7 +92,7 @@ export default function AdminDashboard({ products, suggestions, suggestionsError
       <div className="orders-toolbar"><label htmlFor="order-filter">Filtrar pedidos</label><select id="order-filter" value={orderFilter} onChange={(event) => setOrderFilter(event.target.value)}><option value="todos">Todos los estados</option>{orderStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
       {ordersError && <div className="error-msg">{ordersError}</div>}
       {error && <div className="error-msg">{error}</div>}
-      {!ordersError && visibleOrders.length === 0 ? <div className="inbox-empty"><ShoppingBag size={25} /><h3>{orders.length ? "No hay pedidos en este estado" : "Aún no hay pedidos"}</h3><p>Los pedidos confirmados desde la tienda aparecerán aquí para darles seguimiento.</p></div> : <div className="order-list">
+      {!ordersError && visibleOrders.length === 0 ? <div className="inbox-empty"><ShoppingBag size={25} /><h3>{orders.length ? "No hay pedidos en este estado" : "Aún no hay pedidos"}</h3><p>Esta bandeja muestra pedidos enviados desde el checkout. Añadir perfumes a la bolsa todavía no crea una orden.</p></div> : <div className="order-list">
         {visibleOrders.map((item) => {
           const statusLabel = orderStatuses.find(([value]) => value === item.status)?.[1] || item.status || "Estado pendiente";
           return <article className="order-card" key={item.id}>
