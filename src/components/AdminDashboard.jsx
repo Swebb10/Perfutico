@@ -16,7 +16,7 @@ export default function AdminDashboard({ products, suggestions, suggestionsError
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const pending = suggestions.filter((item) => item.status !== "revisada").length;
-  const edit = (item) => { setEditing(item.id); setForm({ ...blank, ...item, notes: { ...blank.notes, ...(item.notes || {}) } }); setError(""); window.scrollTo(0, 0); };
+  const edit = (item) => { setEditing(item.id); setForm({ ...blank, ...item, notes: { ...blank.notes, ...(item.notes || {}) } }); setError(""); document.querySelector(".admin-scrim")?.scrollTo({ top: 0, behavior: "smooth" }); };
   const field = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const note = (key) => (e) => setForm((f) => ({ ...f, notes: { ...f.notes, [key]: e.target.value } }));
 

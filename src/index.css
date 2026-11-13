@@ -222,3 +222,7 @@ body{font-size:15px}
   .review-button{min-height:42px}
   .float-favs{width:42px;height:42px}
 }
+
+/* Administration is a full-screen modal: scroll its overlay, not the page behind it. */
+body:has(.admin-scrim){overflow:hidden}
+.admin-scrim{overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable}
